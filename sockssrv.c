@@ -297,7 +297,8 @@ static void copyloop(int fd1, int fd2) {
 	}
 }
 
-static enum errorcode check_credentials(unsigned char* buf, size_t n) {
+static enum errorcode check_credentials(unsigned char* buf, size_t n, struct client *client) {
+	int af = AF_INET;
 	if(n < 5) return EC_GENERAL_FAILURE;
 	if(buf[0] != 1) return EC_GENERAL_FAILURE;
 	unsigned ulen, plen;
@@ -311,6 +312,13 @@ static enum errorcode check_credentials(unsigned char* buf, size_t n) {
 	user[ulen] = 0;
 	pass[plen] = 0;
 	if(!strcmp(user, auth_user) && !strcmp(pass, auth_pass)) return EC_SUCCESS;
+
+	char clientname[256];
+	af = SOCKADDR_UNION_AF(&client->addr);
+	void *ipdata = SOCKADDR_UNION_ADDRESS(&client->addr);
+	inet_ntop(af, ipdata, clientname, sizeof clientname);
+
+	dolog("%s - client %s: failed to authenticate\n",clientname, user);
 	return EC_NOT_ALLOWED;
 }
 
@@ -330,7 +338,7 @@ static int handshake(struct thread *t) {
 				if(am == AM_INVALID) return -1;
 				break;
 			case SS_2_NEED_AUTH:
-				ret = check_credentials(buf, n);
+				ret = check_credentials(buf, n, &t->client.addr);
 				send_auth_response(t->client.fd, 1, ret);
 				if(ret != EC_SUCCESS)
 					return -1;
